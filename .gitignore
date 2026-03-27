@@ -1,0 +1,47 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Data
+data/*.db
+data/audio/
+cache/
+
+# Local transcription
+IN/*.mp3
+OUT/*.mp3
+transcribe.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Server setup and deployment (private)
+new-setup/
+scripts/deploy.sh
+scripts/backup.sh
+scripts/s3_backup.py
+scripts/mediepodden-backup.service
+scripts/mediepodden-backup.timer
+
+# Project instructions (private)
+CLAUDE.md
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

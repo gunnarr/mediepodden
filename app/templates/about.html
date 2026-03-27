@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Om Mediepodden s&ouml;k{% endblock %}
+
+{% block head %}
+<meta name="description" content="Om Mediepodden s&ouml;k &mdash; s&ouml;ktj&auml;nst f&ouml;r alla avsnitt av Mediepodden med Emanuel Karlsten och Olle Lidbom. Transkriberat med KB-Whisper.">
+{% endblock %}
+{% block og %}
+<meta property="og:title" content="Om Mediepodden s&ouml;k">
+<meta property="og:description" content="S&ouml;ktj&auml;nst f&ouml;r alla avsnitt av Mediepodden med Emanuel Karlsten och Olle Lidbom.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mediepodden s&ouml;k">
+<meta property="og:url" content="https://mediepodden.gunnar.se/om">
+<meta property="og:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="sv_SE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Om Mediepodden s&ouml;k">
+<meta name="twitter:description" content="S&ouml;ktj&auml;nst f&ouml;r alla avsnitt av Mediepodden med Emanuel Karlsten och Olle Lidbom.">
+<meta name="twitter:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+{% endblock %}
+
+{% block content %}
+<article class="episode-page">
+    <h1>Om Mediepodden s&ouml;k</h1>
+
+    <section class="about-section">
+        <picture>
+            <source srcset="/static/mediepodden-omslag.webp" type="image/webp">
+            <img src="/static/mediepodden-omslag.jpg" alt="Mediepodden &mdash; Emanuel Karlsten och Olle Lidbom" class="about-cover" width="200" height="200">
+        </picture>
+        <h2>Om Mediepodden</h2>
+        <p>
+            Mediepodden handlar om den komplexa digitala f&ouml;r&auml;ndring som hela samh&auml;llet
+            st&aring;r inf&ouml;r. Mediepodden fokuserar p&aring; f&ouml;r&auml;ndringen i traditionella, digitala
+            och sociala medier. Och vi g&ouml;r det utan att vara r&auml;dda f&ouml;r konflikter.
+            Mediepodden drivs av <strong>Emanuel Karlsten</strong> och <strong>Olle Lidbom</strong>.
+            {% if podcast_url %}<a href="{{ podcast_url }}" target="_blank" rel="noopener">Lyssna p&aring; podden</a>.{% endif %}
+        </p>
+    </section>
+
+    <section class="about-section">
+        <h2>Vad &auml;r Mediepodden s&ouml;k?</h2>
+        <p>
+            Mediepodden s&ouml;k &auml;r en s&ouml;ktj&auml;nst d&auml;r du kan s&ouml;ka igenom transkriptioner
+            av alla avsnitt f&ouml;r att hitta just det &auml;mne, den person eller det citat du
+            letar efter. Varje s&ouml;ktr&auml;ff l&auml;nkar till r&auml;tt st&auml;lle i r&auml;tt avsnitt.
+        </p>
+        {% if stats.episode_count > 0 %}
+        <p>
+            Just nu finns
+            <strong>{{ stats.episode_count }} avsnitt</strong> indexerade, totalt
+            <strong>{% if stats.total_hours %}{{ stats.total_hours }} timmar och {{ stats.total_minutes }} minuter{% else %}{{ stats.total_minutes }} minuter{% endif %}</strong>
+            av inspelat material f&ouml;rdelat p&aring;
+            <strong>{{ "{:,}".format(stats.segment_count).replace(",", "\u00a0") }} textsegment</strong>.
+        </p>
+        {% endif %}
+    </section>
+
+    <section class="about-section">
+        <h2>Hur transkriberingen fungerar</h2>
+        <p>
+            Alla avsnitt transkriberas automatiskt med hj&auml;lp av
+            <strong><a href="https://huggingface.co/KBLab/kb-whisper-large" target="_blank" rel="noopener">KB-Whisper</a></strong>,
+            en svensk tal-till-text-modell utvecklad av
+            <strong><a href="https://www.kb.se" target="_blank" rel="noopener">Kungliga biblioteket</a></strong> (KB).
+        </p>
+        <p>
+            Notera att automatisk transkribering inte &auml;r perfekt &mdash; det kan f&ouml;rekomma
+            felh&ouml;rningar, s&auml;rskilt av egennamn, facktermer och ovanliga ord.
+            Talaridentifieringen kan ocks&aring; ibland missta sig, s&auml;rskilt vid
+            snabba replikskiften.
+        </p>
+    </section>
+
+    <section class="about-section">
+        <h2>Byggt av</h2>
+        <p>
+            Mediepodden s&ouml;k &auml;r skapad av webbsnickaren <strong><a href="https://gunnar.se" target="_blank" rel="noopener">Gunnar R Johansson</a></strong>.
+        </p>
+    </section>
+</article>
+{% endblock %}

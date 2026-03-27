@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Avsnitt &mdash; Mediepodden s&ouml;k{% endblock %}
+
+{% block head %}
+<meta name="description" content="Alla avsnitt av Mediepodden &mdash; {{ episodes|length }} avsnitt med transkriptioner, s&ouml;kbara i fulltext.">
+{% endblock %}
+{% block og %}
+<meta property="og:title" content="Avsnitt &mdash; Mediepodden s&ouml;k">
+<meta property="og:description" content="Alla {{ episodes|length }} avsnitt av Mediepodden, transkriberade och s&ouml;kbara.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mediepodden s&ouml;k">
+<meta property="og:url" content="https://mediepodden.gunnar.se/avsnitt">
+<meta property="og:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="sv_SE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Avsnitt &mdash; Mediepodden s&ouml;k">
+<meta name="twitter:description" content="Alla {{ episodes|length }} avsnitt av Mediepodden, transkriberade och s&ouml;kbara.">
+<meta name="twitter:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+{% endblock %}
+
+{% block content %}
+<div class="episodes-header">
+    <h1>Avsnitt</h1>
+    <div class="episodes-filter">
+        <label for="episode-filter" class="visually-hidden">Filtrera avsnitt</label>
+        <input type="search" id="episode-filter" placeholder="Filtrera avsnitt..." autocomplete="off">
+    </div>
+</div>
+
+{% if episodes %}
+<div class="episodes-table-wrap">
+<table class="episodes-table" id="episode-list">
+    <thead>
+        <tr>
+            <th>Datum</th>
+            <th class="col-num">Nr</th>
+            <th>Titel</th>
+            <th class="col-desc">Beskrivning</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for ep in episodes %}
+        <tr class="episode-row{% if ep.transcription_status != 'completed' %} episode-row-pending{% endif %}" data-title="{{ ep.title|lower }}" data-number="{{ ep.episode_number or '' }}" data-desc="{{ (ep.description or '')|lower }}">
+            <td class="cell-date">
+                {% if ep.published_date %}
+                <time datetime="{{ ep.published_date }}">{{ ep.published_date[:10] }}</time>
+                {% endif %}
+            </td>
+            <td class="cell-num">{{ ep.episode_number or '' }}</td>
+            <td class="cell-title">
+                {{ ep.title|short_title }}
+                {% if ep.transcription_status != 'completed' %}
+                <span class="status status-{{ ep.transcription_status }}">
+                    {% if ep.transcription_status == 'pending' %}Ej transkriberat
+                    {% elif ep.transcription_status == 'queued' %}I k&ouml;
+                    {% elif ep.transcription_status == 'processing' %}Transkriberas
+                    {% elif ep.transcription_status == 'failed' %}Misslyckades
+                    {% endif %}
+                </span>
+                {% endif %}
+            </td>
+            <td class="cell-desc">
+                {% if ep.description and ep.description|length > 120 %}
+                <span class="desc-toggle" tabindex="0" role="button">
+                    <span class="desc-short">{{ ep.description[:120] }}&hellip;</span>
+                    <span class="desc-full">{{ ep.description }}</span>
+                </span>
+                {% elif ep.description %}
+                {{ ep.description }}
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p>Inga avsnitt tillg&auml;ngliga &auml;nnu.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var filter = document.getElementById('episode-filter');
+    if (!filter) return;
+    document.addEventListener('click', function(e) {
+        var toggle = e.target.closest('.desc-toggle');
+        if (toggle) toggle.classList.toggle('open');
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            var toggle = e.target.closest('.desc-toggle');
+            if (toggle) { e.preventDefault(); toggle.classList.toggle('open'); }
+        }
+    });
+    filter.addEventListener('input', function() {
+        var q = this.value.toLowerCase();
+        var rows = document.querySelectorAll('#episode-list tbody .episode-row');
+        rows.forEach(function(row) {
+            var title = row.dataset.title || '';
+            var num = row.dataset.number || '';
+            var desc = row.dataset.desc || '';
+            var match = !q || title.indexOf(q) !== -1 || num.indexOf(q) !== -1 || desc.indexOf(q) !== -1;
+            row.style.display = match ? '' : 'none';
+        });
+    });
+})();
+</script>
+{% endblock %}

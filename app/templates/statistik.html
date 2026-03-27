@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Statistik &mdash; Mediepodden s&ouml;k{% endblock %}
+
+{% block head %}
+<meta name="description" content="Statistik &ouml;ver Mediepoddens mest omn&auml;mnda personer, f&ouml;retag, plattformar och &auml;mnen &mdash; baserat p&aring; {{ stats.episode_count }} transkriberade avsnitt.">
+{% endblock %}
+{% block og %}
+<meta property="og:title" content="Statistik &mdash; Mediepodden s&ouml;k">
+<meta property="og:description" content="Mest omn&auml;mnda personer, f&ouml;retag och &auml;mnen i Mediepodden.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mediepodden s&ouml;k">
+<meta property="og:url" content="https://mediepodden.gunnar.se/statistik">
+<meta property="og:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="sv_SE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Statistik &mdash; Mediepodden s&ouml;k">
+<meta name="twitter:description" content="Mest omn&auml;mnda personer, f&ouml;retag och &auml;mnen i Mediepodden.">
+<meta name="twitter:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+{% endblock %}
+
+{% block content %}
+<div class="statistik-page">
+    <h1>Statistik</h1>
+
+    <p class="statistik-summary">
+        <span>{{ stats.episode_count }} avsnitt</span>
+        {% if stats.total_hours is defined %}
+        <span class="stat-sep" aria-hidden="true">&middot;</span>
+        <span>{{ stats.total_hours }} tim {{ stats.remaining_minutes }} min</span>
+        {% endif %}
+        {% if entities %}
+        <span class="stat-sep" aria-hidden="true">&middot;</span>
+        <span>{{ "{:,}".format(entities.total_entities | default(0)).replace(",", "&nbsp;") | safe }} &auml;mnen</span>
+        {% endif %}
+    </p>
+
+    <!-- Timeline target (empty until user clicks an entity) -->
+    <div id="entity-timeline"></div>
+
+    {% if entities %}
+    {% for cat_key, cat in entities.categories.items() %}
+    {% if cat.entities %}
+    {% set top = cat.entities[:10] %}
+    {% set rest = cat.entities[10:] %}
+    {% set max_count = top[0].count if top else 1 %}
+    <section class="entity-section">
+        <h2>{{ cat.label }} <span class="entity-count">{{ cat.entities | length }}</span></h2>
+
+        <!-- Top 10 bar chart -->
+        <div class="stat-bars">
+            {% for entity in top %}
+            <div class="stat-bar-row">
+                <a href="/?q={{ entity.search_term | urlencode }}" class="stat-bar-name"
+                   hx-get="/statistik/tidslinje?q={{ entity.search_term | urlencode }}"
+                   hx-target="#entity-timeline"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="event.preventDefault()">{{ entity.name }}</a>
+                <span class="stat-bar-count">{{ entity.count }}</span>
+                <div class="stat-bar-track">
+                    <div class="stat-bar-fill" style="--bar-pct: {{ (entity.count / max_count * 100) | round(1) }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Remaining entities as proportional tags -->
+        {% if rest %}
+        {% set rest_max = rest[0].count %}
+        {% set visible_tags = rest[:30] %}
+        {% set hidden_tags = rest[30:] %}
+        <div class="entity-tags">
+            {% for entity in visible_tags %}
+            <a href="/?q={{ entity.search_term | urlencode }}" class="entity-tag"
+               style="font-size: {{ '%.2f' | format(0.75 + 0.2 * (entity.count | log / (rest_max | log if rest_max > 1 else 1))) }}rem"
+               hx-get="/statistik/tidslinje?q={{ entity.search_term | urlencode }}"
+               hx-target="#entity-timeline"
+               hx-swap="innerHTML"
+               hx-push-url="false"
+               onclick="event.preventDefault()">{{ entity.name }}&nbsp;<span class="tag-count">{{ entity.count }}</span></a>
+            {% endfor %}
+            {% if hidden_tags %}
+            <details class="entity-tags-more">
+                <summary class="entity-tag entity-tag-toggle">Visa alla {{ rest | length }}&hellip;</summary>
+                <div class="entity-tags entity-tags-expanded">
+                    {% for entity in hidden_tags %}
+                    <a href="/?q={{ entity.search_term | urlencode }}" class="entity-tag"
+                       style="font-size: {{ '%.2f' | format(0.75 + 0.2 * (entity.count | log / (rest_max | log if rest_max > 1 else 1))) }}rem"
+                       hx-get="/statistik/tidslinje?q={{ entity.search_term | urlencode }}"
+                       hx-target="#entity-timeline"
+                       hx-swap="innerHTML"
+                       hx-push-url="false"
+                       onclick="event.preventDefault()">{{ entity.name }}&nbsp;<span class="tag-count">{{ entity.count }}</span></a>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+    {% endfor %}
+    {% else %}
+    <p>Inga entiteter har extraherats &auml;nnu.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.body.addEventListener('htmx:afterSettle', function(evt) {
+    if (evt.detail.target && evt.detail.target.id === 'entity-timeline') {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+});
+</script>
+{% endblock %}

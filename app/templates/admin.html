@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Admin &mdash; Mediepodden s&ouml;k{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Admin</h1>
+</div>
+
+{# --- Job progress (HTMX polling) --- #}
+<div id="job-status"
+     hx-get="/admin/status"
+     hx-trigger="load, every 3s"
+     hx-swap="innerHTML"
+     aria-live="polite"
+     aria-label="Jobbstatus">
+    {% include "partials/admin_status.html" %}
+</div>
+
+{# --- RSS feed form --- #}
+<section class="feed-fetch">
+    <h2>RSS-feed</h2>
+    <form action="/admin/feed" method="post" class="feed-url-form">
+        <div class="input-row">
+            <label for="feed-url-input" class="visually-hidden">RSS-feed URL</label>
+            <input type="url" name="feed_url" id="feed-url-input" placeholder="https://example.com/feed.xml"
+                   value="{{ feed_url }}" required>
+            <button type="submit" class="btn">H&auml;mta</button>
+        </div>
+    </form>
+</section>
+
+{# --- Episode list from feed --- #}
+{% if episodes %}
+<section>
+    <p class="admin-stats">Avsnitt: {{ total_feed }} | Transkriberade: {{ completed_count }} | Kvar: {{ remaining_count }}{% if next_check %} | N&auml;sta koll: {{ next_check }}{% endif %}</p>
+    <form action="/admin/transkribera" method="post">
+        <div class="feed-list-header">
+            <h2>Avsnitt</h2>
+            <div class="feed-list-actions">
+                <button type="button" class="btn btn-secondary btn-small" onclick="toggleAll(this)">Markera nya</button>
+                <button type="submit" class="btn btn-small">Transkribera valda</button>
+            </div>
+        </div>
+
+        <table class="admin-table feed-table">
+            <thead>
+                <tr>
+                    <th class="col-check" scope="col"><span class="visually-hidden">V&auml;lj</span></th>
+                    <th class="col-num" scope="col">#</th>
+                    <th scope="col">Titel</th>
+                    <th scope="col">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ep in episodes %}
+                <tr{% if ep.db_status == 'completed' %} class="imported"{% endif %}>
+                    <td class="col-check">
+                        {% if ep.db_status != 'completed' and ep.audio_url %}
+                        <input type="checkbox" name="episodes" value="{{ ep.guid }}" aria-label="V&auml;lj {{ ep.title }}">
+                        {% endif %}
+                    </td>
+                    <td class="col-num">{{ ep.episode_number or '—' }}</td>
+                    <td class="truncate">{{ ep.title }}</td>
+                    <td>
+                        {% if ep.db_status %}
+                        <span class="status status-{{ ep.db_status }}">{{ ep.db_status }}</span>
+                        {% else %}
+                        <span class="status status-pending">ny</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="feed-list-footer">
+            <button type="submit" class="btn">Transkribera valda</button>
+        </div>
+    </form>
+</section>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAll(btn) {
+    var boxes = document.querySelectorAll('.feed-table input[type="checkbox"]');
+    var allChecked = Array.from(boxes).every(function(b) { return b.checked; });
+    boxes.forEach(function(b) { b.checked = !allChecked; });
+}
+</script>
+{% endblock %}

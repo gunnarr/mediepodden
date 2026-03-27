@@ -1,0 +1,72 @@
+{% if jobs %}
+<section class="progress-section">
+    <div class="admin-header">
+        <h2>Transkribering</h2>
+        {% set has_done = jobs|selectattr('is_done')|list %}
+        {% if has_done %}
+        <form action="/admin/rensa" method="post" style="display:inline">
+            <button type="submit" class="btn btn-secondary btn-small">Rensa klara</button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% for job in jobs %}
+    <div style="margin-bottom: 1rem;">
+        <div class="progress-header">
+            <span>
+                {% if job.episode_number %}{{ job.episode_number }}. {% endif %}{{ job.title }}
+            </span>
+            <span class="progress-pct">{{ job.progress }}%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ job.progress }}%"></div>
+        </div>
+        <div class="progress-detail">
+            {{ job.stage_label }}
+            {% if job.error %} &mdash; {{ job.error }}{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</section>
+
+{% set completed_ids = jobs|selectattr('stage.value', 'equalto', 'completed')|map(attribute='id')|list %}
+{% if completed_ids %}
+<script>
+(function() {
+    var completed = {{ completed_ids|tojson }};
+    var key = 'celebrated_' + completed.join(',');
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+
+    // Pling via Web Audio API
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        [523.25, 659.25, 783.99].forEach(function(freq, i) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.5);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + i * 0.15);
+            osc.stop(ctx.currentTime + i * 0.15 + 0.5);
+        });
+    } catch(e) {}
+
+    // Konfetti via canvas-confetti (ladda on-demand)
+    if (typeof confetti === 'function') {
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+    } else {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
+        s.onload = function() {
+            confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+        };
+        document.head.appendChild(s);
+    }
+})();
+</script>
+{% endif %}
+{% endif %}

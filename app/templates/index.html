@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}{% if query %}{{ query }} &mdash; {% endif %}S&ouml;k i Mediepodden{% endblock %}
+
+{% block head %}
+{% if page is defined and page > 1 %}<meta name="robots" content="noindex, follow">{% endif %}
+{% endblock %}
+{% block og %}
+<meta property="og:title" content="{% if query %}{{ query }} &mdash; {% endif %}S&ouml;k i Mediepodden">
+<meta property="og:description" content="{% if query and results %}{{ total }} tr&auml;ffar f&ouml;r &ldquo;{{ query }}&rdquo; i Mediepodden.{% else %}S&ouml;k bland transkriptioner av alla avsnitt av Mediepodden. Fulltexts&ouml;kning med ljudklipp och v&aring;gformsvisning.{% endif %}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mediepodden s&ouml;k">
+<meta property="og:url" content="https://mediepodden.gunnar.se{{ request.url.path }}">
+<meta property="og:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="sv_SE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{% if query %}{{ query }} &mdash; {% endif %}S&ouml;k i Mediepodden">
+<meta name="twitter:description" content="{% if query and results %}{{ total }} tr&auml;ffar f&ouml;r &ldquo;{{ query }}&rdquo; i Mediepodden.{% else %}S&ouml;k bland transkriptioner av alla avsnitt av Mediepodden. Fulltexts&ouml;kning med ljudklipp och v&aring;gformsvisning.{% endif %}">
+<meta name="twitter:image" content="https://mediepodden.gunnar.se/static/og-image.png">
+{% endblock %}
+
+{% block content %}
+<div class="search-hero">
+    <h1>S&ouml;k i Mediepodden</h1>
+    <form action="/" method="get" class="search-form" role="search" aria-label="S&ouml;k i avsnitt" id="search-form">
+        <div class="search-input-row">
+            <label for="search-input" class="visually-hidden">S&ouml;kord</label>
+            <input
+                id="search-input"
+                type="search"
+                name="q"
+                value="{{ query }}"
+                placeholder="S&ouml;k efter inneh&aring;ll, &auml;mnen, namn..."
+                autofocus
+                autocomplete="off"
+                hx-get="/sok"
+                hx-trigger="input changed delay:300ms, search"
+                hx-target="#search-results"
+                hx-include="#sort-input, #avsnitt-input"
+                hx-push-url="false"
+                hx-indicator="#search-spinner"
+            >
+            <input type="hidden" name="sort" id="sort-input" value="{{ sort or 'relevans' }}">
+            <input type="hidden" name="avsnitt" id="avsnitt-input" value="{{ episode_filter or '' }}">
+            <button type="submit">S&ouml;k</button>
+            <span class="htmx-indicator" id="search-spinner" aria-hidden="true"></span>
+        </div>
+    </form>
+    <div class="sort-options{% if not query or not results %} sort-hidden{% endif %}" id="sort-options">
+        <span class="sort-label">Sortera:</span>
+        <button type="button" class="sort-btn{% if (sort or 'relevans') == 'relevans' %} active{% endif %}" data-sort="relevans">Relevans</button>
+        <button type="button" class="sort-btn{% if sort == 'aldst' %} active{% endif %}" data-sort="aldst">&Auml;ldst f&ouml;rst</button>
+        <button type="button" class="sort-btn{% if sort == 'nyast' %} active{% endif %}" data-sort="nyast">Nyast f&ouml;rst</button>
+    </div>
+    {% if entities and not query %}
+    <div class="topic-tags" id="topic-tags" aria-label="Popul&auml;ra &auml;mnen">
+        {% for cat_key, cat in entities.categories.items() %}
+        {% for entity in cat.entities[:10] %}
+        <a href="/?q={{ entity.search_term | urlencode }}" class="topic-tag">{{ entity.name }}</a>
+        {% endfor %}
+        {% endfor %}
+    </div>
+    <button type="button" class="topic-tags-toggle" id="topic-tags-toggle" aria-expanded="false" aria-controls="topic-tags">Visa fler</button>
+    {% endif %}
+</div>
+
+<section class="results" aria-label="S&ouml;kresultat" id="search-results">
+    <h2 class="visually-hidden">S&ouml;kresultat</h2>
+    {% if query %}
+    {% include "partials/search_results.html" %}
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script defer src="https://unpkg.com/wavesurfer.js@7"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var activePlayer = null;
+    var activeBtn = null;
+    var wavesurfers = {};
+
+    window.toggleClip = function(btn) {
+        var player = btn.closest('.result-player');
+        var epId = player.dataset.episode;
+        var start = player.dataset.start;
+        var end = player.dataset.end;
+        var container = player.querySelector('.waveform-container');
+
+        // Stop any currently playing clip
+        if (activePlayer && activePlayer !== container) {
+            var ws = wavesurfers[activePlayer.id];
+            if (ws) ws.pause();
+            if (activeBtn) {
+                activeBtn.querySelector('.play-icon').style.display = '';
+                activeBtn.querySelector('.pause-icon').style.display = 'none';
+            }
+            activePlayer.style.display = 'none';
+        }
+
+        if (!wavesurfers[container.id]) {
+            // Show waveform and initialize wavesurfer
+            container.style.display = '';
+            var url = '/klipp/' + epId + '/' + start + '-' + end + '.mp3';
+            var ws = WaveSurfer.create({
+                container: container,
+                waveColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#999',
+                progressColor: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b2500',
+                cursorColor: getComputedStyle(document.documentElement).getPropertyValue('--accent-light').trim() || '#c44d2a',
+                height: 40,
+                barWidth: 2,
+                barGap: 1,
+                barRadius: 2,
+                url: url,
+                normalize: true,
+            });
+
+            ws.on('finish', function() {
+                btn.querySelector('.play-icon').style.display = '';
+                btn.querySelector('.pause-icon').style.display = 'none';
+                container.style.display = 'none';
+                activePlayer = null;
+                activeBtn = null;
+            });
+
+            ws.on('ready', function() {
+                ws.play();
+            });
+
+            wavesurfers[container.id] = ws;
+            activePlayer = container;
+            activeBtn = btn;
+            btn.querySelector('.play-icon').style.display = 'none';
+            btn.querySelector('.pause-icon').style.display = '';
+        } else {
+            var ws = wavesurfers[container.id];
+            if (ws.isPlaying()) {
+                ws.pause();
+                btn.querySelector('.play-icon').style.display = '';
+                btn.querySelector('.pause-icon').style.display = 'none';
+                container.style.display = 'none';
+                activePlayer = null;
+                activeBtn = null;
+            } else {
+                container.style.display = '';
+                ws.play();
+                activePlayer = container;
+                activeBtn = btn;
+                btn.querySelector('.play-icon').style.display = 'none';
+                btn.querySelector('.pause-icon').style.display = '';
+            }
+        }
+    };
+
+    window.filterEpisode = function(ep) {
+        var input = document.getElementById('avsnitt-input');
+        // Toggle: click same episode again clears filter
+        if (input.value === String(ep)) {
+            input.value = '';
+        } else {
+            input.value = ep;
+        }
+        htmx.trigger(document.getElementById('search-input'), 'search');
+    };
+
+    window.clearEpisodeFilter = function() {
+        document.getElementById('avsnitt-input').value = '';
+        htmx.trigger(document.getElementById('search-input'), 'search');
+    };
+
+    window.copyResultLink = function(btn, path) {
+        var url = window.location.origin + path;
+        navigator.clipboard.writeText(url).then(function() {
+            var icon = btn.querySelector('.copy-icon');
+            var orig = icon.textContent;
+            icon.textContent = '\u2713';
+            setTimeout(function() { icon.textContent = orig; }, 1500);
+        });
+    };
+
+    // Stop active audio when HTMX swaps content
+    document.body.addEventListener('htmx:beforeSwap', function(evt) {
+        if (evt.detail.target && evt.detail.target.id === 'search-results') {
+            Object.keys(wavesurfers).forEach(function(id) {
+                wavesurfers[id].destroy();
+            });
+            wavesurfers = {};
+            activePlayer = null;
+            activeBtn = null;
+        }
+    });
+
+    // Clear episode filter when query text changes
+    document.getElementById('search-input').addEventListener('input', function() {
+        document.getElementById('avsnitt-input').value = '';
+    });
+
+    // Sort buttons
+    document.getElementById('sort-options').addEventListener('click', function(evt) {
+        var btn = evt.target.closest('.sort-btn');
+        if (!btn) return;
+        var sortVal = btn.dataset.sort;
+        document.getElementById('sort-input').value = sortVal;
+        // Update active state
+        this.querySelectorAll('.sort-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        // Trigger HTMX search
+        htmx.trigger(document.getElementById('search-input'), 'search');
+    });
+
+    // Show/hide sort options based on results
+    document.body.addEventListener('htmx:afterSettle', function(evt) {
+        if (evt.detail.target && evt.detail.target.id === 'search-results') {
+            var hasResults = evt.detail.target.querySelector('.result-list');
+            var sortDiv = document.getElementById('sort-options');
+            if (hasResults) {
+                sortDiv.classList.remove('sort-hidden');
+            } else {
+                sortDiv.classList.add('sort-hidden');
+            }
+        }
+    });
+
+    // Update URL when search is performed via HTMX (for shareable links)
+    document.body.addEventListener('htmx:afterSettle', function(evt) {
+        if (evt.detail.target && evt.detail.target.id === 'search-results') {
+            var input = document.getElementById('search-input');
+            var sortInput = document.getElementById('sort-input');
+            var avsnittInput = document.getElementById('avsnitt-input');
+            if (input && input.value.trim()) {
+                var params = new URLSearchParams();
+                params.set('q', input.value.trim());
+                if (sortInput && sortInput.value && sortInput.value !== 'relevans') {
+                    params.set('sort', sortInput.value);
+                }
+                if (avsnittInput && avsnittInput.value) {
+                    params.set('avsnitt', avsnittInput.value);
+                }
+                history.replaceState(null, '', '/?' + params.toString());
+            } else {
+                history.replaceState(null, '', '/');
+            }
+        }
+    });
+
+    // Topic tags expand/collapse on mobile
+    var toggleBtn = document.getElementById('topic-tags-toggle');
+    var tagsDiv = document.getElementById('topic-tags');
+    if (toggleBtn && tagsDiv) {
+        toggleBtn.addEventListener('click', function() {
+            var expanded = tagsDiv.classList.toggle('expanded');
+            toggleBtn.textContent = expanded ? 'Visa f\u00e4rre' : 'Visa fler';
+            toggleBtn.setAttribute('aria-expanded', expanded);
+        });
+    }
+});
+</script>
+{% endblock %}

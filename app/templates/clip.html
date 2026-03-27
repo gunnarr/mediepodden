@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}S&ouml;ktr&auml;ff ur {{ episode.title }} ({{ segment.start_time|timestamp }}) &mdash; Mediepodden s&ouml;k{% endblock %}
+
+{% block og %}
+<meta property="og:title" content="S&ouml;ktr&auml;ff ur {% if episode.episode_number %}Avsnitt {{ episode.episode_number }} &mdash; {% endif %}{{ episode.title }}">
+<meta property="og:description" content="{{ segment.text[:160] }}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Mediepodden s&ouml;k">
+<meta property="og:url" content="https://mediepodden.gunnar.se{{ request.url.path }}">
+<meta property="og:image" content="https://mediepodden.gunnar.se{{ clip_url | replace('.mp3', '/og.png') }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="sv_SE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="S&ouml;ktr&auml;ff ur {% if episode.episode_number %}Avsnitt {{ episode.episode_number }} &mdash; {% endif %}{{ episode.title }}">
+<meta name="twitter:description" content="{{ segment.text[:160] }}">
+<meta name="twitter:image" content="https://mediepodden.gunnar.se{{ clip_url | replace('.mp3', '/og.png') }}">
+{% endblock %}
+
+{% block content %}
+<article class="clip-page">
+    <header class="clip-header">
+        <span class="result-source">
+            {% if episode.episode_number %}Avsnitt {{ episode.episode_number }}{% endif %}
+            {% if episode.published_date %}
+            <span class="result-sep">&middot;</span>
+            <span class="result-date">{{ episode.published_date[:10] }}</span>
+            {% endif %}
+            <span class="result-sep">&middot;</span>
+            Klipp fr&aring;n: <span class="result-time">{{ segment.start_time|timestamp }}</span>
+        </span>
+        <h1 class="result-title clip-title">
+            {{ episode.title }}
+        </h1>
+    </header>
+
+    <section class="clip-content" aria-label="Klipp fr&aring;n avsnittet">
+        <div class="clip-quote" data-episode="{{ episode.id }}" data-start="{{ segment.start_time }}" data-end="{{ segment.end_time }}">
+            {%- for seg in context_segments %}{% if not loop.first %} {% endif %}{% if seg.id == segment.id %}<mark class="clip-quote-main">{{ seg.text }}</mark>{% else %}<span class="clip-quote-context">{{ seg.text }}</span>{% endif %}{%- endfor %}
+        </div>
+
+        <div class="clip-player">
+            <button type="button" class="play-btn-compact" aria-label="Spela klipp" id="clip-play-btn">
+                <span class="play-icon">&#9654;</span>
+                <span class="pause-icon" style="display:none">&#10074;&#10074;</span>
+            </button>
+            <div class="waveform-container" id="clip-waveform"></div>
+        </div>
+    </section>
+
+    <div class="clip-actions">
+        <button type="button" class="copy-link-btn" id="clip-copy-link" aria-label="Kopiera l&auml;nk">
+            <span class="copy-icon">L&auml;nk</span>
+        </button>
+    </div>
+
+    <aside class="listen-cta" aria-label="Lyssna p&aring; avsnittet">
+        <div class="listen-cta-body">
+            <p>Lyssna p&aring; hela avsnittet i din poddspelar-app.</p>
+        </div>
+    </aside>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script defer src="https://unpkg.com/wavesurfer.js@7"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var main = document.querySelector('.clip-quote');
+    if (!main) return;
+    var epId = main.dataset.episode;
+    var start = parseFloat(main.dataset.start);
+    var end = parseFloat(main.dataset.end);
+    var clipStart = Math.max(start - 10, 0);
+    var clipEnd = end + 10;
+    var btn = document.getElementById('clip-play-btn');
+    var container = document.getElementById('clip-waveform');
+    var clipUrl = '/klipp/' + epId + '/' + clipStart + '-' + clipEnd + '.mp3';
+    var ws = WaveSurfer.create({
+        container: container,
+        waveColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#999',
+        progressColor: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b2500',
+        cursorColor: getComputedStyle(document.documentElement).getPropertyValue('--accent-light').trim() || '#c44d2a',
+        height: 48,
+        barWidth: 2,
+        barGap: 1,
+        barRadius: 2,
+        url: clipUrl,
+        normalize: true,
+    });
+    ws.on('finish', function() {
+        btn.querySelector('.play-icon').style.display = '';
+        btn.querySelector('.pause-icon').style.display = 'none';
+    });
+
+    btn.addEventListener('click', function() {
+        if (ws.isPlaying()) {
+            ws.pause();
+            btn.querySelector('.play-icon').style.display = '';
+            btn.querySelector('.pause-icon').style.display = 'none';
+        } else {
+            ws.play();
+            btn.querySelector('.play-icon').style.display = 'none';
+            btn.querySelector('.pause-icon').style.display = '';
+        }
+    });
+
+    // Copy link button
+    document.getElementById('clip-copy-link').addEventListener('click', function() {
+        var linkUrl = window.location.href;
+        navigator.clipboard.writeText(linkUrl).then(function() {
+            var icon = document.querySelector('#clip-copy-link .copy-icon');
+            var orig = icon.textContent;
+            icon.textContent = '\u2713';
+            setTimeout(function() { icon.textContent = orig; }, 1500);
+        });
+    });
+});
+</script>
+{% endblock %}
