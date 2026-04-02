@@ -16,7 +16,7 @@ async def robots_txt():
         "Allow: /\n"
         "Disallow: /admin\n"
         "Disallow: /sok\n"
-        "Disallow: /klipp/*/waveform\n"
+        "Disallow: /klipp/\n"
         "\n"
         f"Sitemap: https://{SITE_DOMAIN}/sitemap.xml\n"
     )
