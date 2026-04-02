@@ -141,8 +141,12 @@ async def _monitor_loop():
         await asyncio.sleep(wait)
         try:
             await check_feed()
+            from app.health import record_feed_check
+            record_feed_check()
         except Exception:
             logger.exception("Feed monitor check failed")
+            from app.health import record_error
+            record_error()
 
 
 def start_monitor() -> asyncio.Task:

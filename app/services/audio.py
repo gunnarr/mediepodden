@@ -71,6 +71,8 @@ async def _resolve_audio_path(episode: dict) -> Path | None:
         return tmp_path
     except Exception:
         logger.exception("Failed to download from S3: %s", audio_filename)
+        from app.health import record_error
+        record_error()
         return None
 
 

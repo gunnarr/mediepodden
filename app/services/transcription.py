@@ -255,6 +255,8 @@ async def _process_job(job: TranscriptionJob):
         _update_stage(job, JobStage.COMPLETED)
     except Exception as e:
         logger.exception("Transcription failed for episode %d", job.episode_id)
+        from app.health import record_error
+        record_error()
         _update_stage(job, JobStage.FAILED)
         job.error = str(e)
         await update_episode(

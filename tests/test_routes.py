@@ -165,6 +165,91 @@ class TestHealthEndpoint:
         assert "checks" in data
         assert "database" in data["checks"]
 
+    @pytest.mark.asyncio
+    async def test_health_includes_uptime_and_version(self, client):
+        resp = await client.get("/health")
+        data = resp.json()
+        assert "uptime" in data
+        assert isinstance(data["uptime"], int)
+        assert data["uptime"] >= 0
+        assert "version" in data
+        assert isinstance(data["version"], str)
+
+    @pytest.mark.asyncio
+    async def test_health_includes_freshness_check(self, client):
+        resp = await client.get("/health")
+        data = resp.json()
+        assert "freshness" in data["checks"]
+        freshness = data["checks"]["freshness"]
+        assert "status" in freshness
+        assert "threshold_minutes" in freshness
+        assert freshness["status"] in ("ok", "stale")
+
+    @pytest.mark.asyncio
+    async def test_health_includes_error_rate_check(self, client):
+        resp = await client.get("/health")
+        data = resp.json()
+        assert "error_rate" in data["checks"]
+        error_rate = data["checks"]["error_rate"]
+        assert "status" in error_rate
+        assert "errors_last_5min" in error_rate
+        assert "threshold" in error_rate
+
+    @pytest.mark.asyncio
+    async def test_record_error_increments_error_count(self, client):
+        from app.health import record_error, get_error_rate, _error_timestamps
+        _error_timestamps.clear()
+        assert get_error_rate() == 0
+        record_error()
+        assert get_error_rate() == 1
+        record_error()
+        record_error()
+        assert get_error_rate() == 3
+        _error_timestamps.clear()
+
+    @pytest.mark.asyncio
+    async def test_record_feed_check_updates_freshness(self, client):
+        import app.health as health_mod
+        old_value = health_mod._last_feed_check
+        try:
+            health_mod._last_feed_check = None
+            # Without a feed check, freshness should report no check since startup
+            resp = await client.get("/health")
+            data = resp.json()
+            assert data["checks"]["freshness"]["latest_check"] is None
+
+            # After recording a feed check, freshness should have a timestamp
+            health_mod.record_feed_check()
+            resp = await client.get("/health")
+            data = resp.json()
+            freshness = data["checks"]["freshness"]
+            assert freshness["latest_check"] is not None
+            assert freshness["status"] == "ok"
+            assert freshness["age_minutes"] is not None
+            assert freshness["age_minutes"] >= 0
+        finally:
+            health_mod._last_feed_check = old_value
+
+    @pytest.mark.asyncio
+    async def test_error_rate_threshold_triggers_elevated_status(self, client):
+        from app.health import record_error, _error_timestamps, ERROR_THRESHOLD
+        _error_timestamps.clear()
+        try:
+            # Record enough errors to exceed the threshold
+            for _ in range(ERROR_THRESHOLD):
+                record_error()
+            resp = await client.get("/health")
+            data = resp.json()
+            error_check = data["checks"]["error_rate"]
+            assert error_check["status"] == "elevated"
+            assert error_check["errors_last_5min"] >= ERROR_THRESHOLD
+            assert "message" in error_check
+            # Overall status should reflect the failure
+            assert data["status"] == "error"
+            assert resp.status_code == 503
+        finally:
+            _error_timestamps.clear()
+
 
 class TestSearchPermalinks:
     @pytest.mark.asyncio

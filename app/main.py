@@ -2,11 +2,8 @@ import asyncio
 import base64
 import logging
 import secrets
-import shutil
-import subprocess
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,12 +14,13 @@ from starlette.middleware.gzip import GZipMiddleware as _GZipMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.config import AUDIO_DIR, DATABASE_PATH, SITE_USERNAME, SITE_PASSWORD
-from app.database import get_db, init_db, log_page_view
+from app.config import AUDIO_DIR, SITE_USERNAME, SITE_PASSWORD
+from app.database import init_db, log_page_view
 from app.database.analytics import cleanup_old_analytics
 from app.routers import search, episodes, clips, admin, seo
 from app.rate_limit import limiter
 from app.services.feed_monitor import start_monitor
+from app import health
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +104,7 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         if (
             request.method == "GET"
             and not request.url.path.startswith("/static")
+            and request.url.path != "/health"
             and response.status_code < 400
         ):
             try:
@@ -186,50 +185,9 @@ app.mount(
     name="static",
 )
 
+app.include_router(health.router)
 app.include_router(search.router)
 app.include_router(episodes.router)
 app.include_router(clips.router)
 app.include_router(admin.router)
 app.include_router(seo.router)
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for deploy scripts and monitoring."""
-    checks = {}
-
-    # Database check
-    try:
-        async with get_db() as db:
-            cursor = await db.execute("SELECT COUNT(*) FROM episodes")
-            count = (await cursor.fetchone())[0]
-            checks["database"] = {"status": "ok", "episodes": count}
-    except Exception as e:
-        checks["database"] = {"status": "error", "detail": str(e)}
-
-    # ffmpeg check
-    try:
-        result = subprocess.run(
-            ["ffmpeg", "-version"], capture_output=True, timeout=5
-        )
-        checks["ffmpeg"] = {"status": "ok" if result.returncode == 0 else "error"}
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        checks["ffmpeg"] = {"status": "missing"}
-
-    # Disk space check
-    try:
-        usage = shutil.disk_usage(DATABASE_PATH.parent)
-        free_gb = round(usage.free / (1024**3), 1)
-        checks["disk"] = {
-            "status": "ok" if free_gb > 1 else "warning",
-            "free_gb": free_gb,
-        }
-    except Exception:
-        checks["disk"] = {"status": "unknown"}
-
-    all_ok = all(c.get("status") == "ok" for c in checks.values())
-    status_code = 200 if all_ok else 503
-    return JSONResponse(
-        {"status": "ok" if all_ok else "degraded", "checks": checks},
-        status_code=status_code,
-    )
