@@ -1,5 +1,6 @@
 name: Test & Deploy
 
+# Triggers on push to main — runs tests, then deploys via git pull
 on:
   push:
     branches: [main]
