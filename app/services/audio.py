@@ -41,39 +41,8 @@ def _clip_cache_path(episode_id: int, start: float, end: float) -> Path:
 
 
 async def _resolve_audio_path(episode: dict) -> Path | None:
-    """Resolve audio path: local file first, then S3 download.
-
-    Returns a Path to the audio file, or None if unavailable.
-    If downloaded from S3, the caller must clean up the temp file.
-    Returns a tuple-like behavior via the _s3_temp attribute on the path.
-    """
-    # Try local file first
-    local = get_audio_path(episode)
-    if local:
-        return local
-
-    # Try S3
-    audio_filename = episode.get("audio_filename")
-    if not audio_filename:
-        return None
-
-    from app.services.s3 import is_configured, audio_exists, download_audio
-
-    if not is_configured():
-        return None
-
-    if not await audio_exists(audio_filename):
-        logger.warning("Audio not found in S3: %s", audio_filename)
-        return None
-
-    try:
-        tmp_path = await download_audio(audio_filename)
-        return tmp_path
-    except Exception:
-        logger.exception("Failed to download from S3: %s", audio_filename)
-        from app.health import record_error
-        record_error()
-        return None
+    """Resolve audio path from local files only."""
+    return get_audio_path(episode)
 
 
 async def get_or_create_clip(
@@ -102,14 +71,10 @@ async def get_or_create_clip(
     if cache_path.exists():
         return cache_path
 
-    # Resolve audio (local or S3)
     audio_path = await _resolve_audio_path(episode)
     if not audio_path:
         logger.warning("No audio available for episode %d", episode_id)
         return None
-
-    # Track whether this is a temp file from S3
-    is_local = get_audio_path(episode) is not None
 
     try:
         CLIP_DIR.mkdir(parents=True, exist_ok=True)
@@ -149,10 +114,6 @@ async def get_or_create_clip(
     except FileNotFoundError:
         logger.error("ffmpeg not found. Install ffmpeg to enable audio clips.")
         return None
-    finally:
-        # Clean up S3 temp file
-        if not is_local and audio_path and audio_path.exists():
-            audio_path.unlink(missing_ok=True)
 
 
 async def generate_waveform_data(

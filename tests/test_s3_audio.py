@@ -98,18 +98,11 @@ class TestResolveAudioPath:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_downloads_from_s3_when_no_local(self, tmp_path):
-        tmp_file = tmp_path / "downloaded.mp3"
-        tmp_file.write_bytes(b"fake s3 mp3")
-
-        with (
-            patch("app.services.s3.is_configured", return_value=True),
-            patch("app.services.s3.audio_exists", new_callable=AsyncMock, return_value=True),
-            patch("app.services.s3.download_audio", new_callable=AsyncMock, return_value=tmp_file),
-        ):
-            episode = {"audio_filename": "missing-locally.mp3"}
-            result = await _resolve_audio_path(episode)
-            assert result == tmp_file
+    async def test_returns_none_when_file_missing_locally(self):
+        """No S3 fallback — missing local file returns None."""
+        episode = {"audio_filename": "not-on-disk.mp3"}
+        result = await _resolve_audio_path(episode)
+        assert result is None
 
 
 class TestTranscriptionS3Upload:
