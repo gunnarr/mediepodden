@@ -43,7 +43,7 @@ jobs:
         run: |
           ssh ${{ secrets.DEPLOY_SERVER }} "
             cd /home/mediepodden/mediepodden
-            git pull origin main
+            git pull --ff-only origin main
             source venv/bin/activate
             pip install -r requirements.txt --quiet
             sudo /usr/bin/systemctl restart mediepodden
