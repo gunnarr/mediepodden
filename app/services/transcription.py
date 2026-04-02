@@ -134,10 +134,10 @@ def _update_stage(job: TranscriptionJob, stage: JobStage):
     job.progress = STAGE_PROGRESS[stage]
 
 
-async def _download_audio(job: TranscriptionJob) -> tuple[Path, str, bool]:
-    """Download audio to a temp file, preferring S3 over URL.
+async def _download_audio(job: TranscriptionJob) -> tuple[Path, str]:
+    """Download audio to a temp file.
 
-    Returns: (tmp_path, audio_filename, already_in_s3)
+    Returns: (tmp_path, audio_filename)
     """
     _update_stage(job, JobStage.DOWNLOADING)
     await update_episode(
@@ -160,15 +160,6 @@ async def _download_audio(job: TranscriptionJob) -> tuple[Path, str, bool]:
             job.episode_number, pub_date, feed_guid,
         )
 
-    # Try S3 first
-    from app.services.s3 import audio_exists, download_audio, upload_audio
-
-    if await audio_exists(audio_filename):
-        logger.info("Downloading from S3: %s", audio_filename)
-        tmp_path = await download_audio(audio_filename)
-        return tmp_path, audio_filename, True
-
-    # Fallback: download from URL
     logger.info("Downloading from URL: %s", job.audio_url)
     tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
     tmp_path = Path(tmp.name)
@@ -181,7 +172,7 @@ async def _download_audio(job: TranscriptionJob) -> tuple[Path, str, bool]:
                 async for chunk in resp.aiter_bytes(chunk_size=65536):
                     f.write(chunk)
 
-    return tmp_path, audio_filename, False
+    return tmp_path, audio_filename
 
 
 async def _transcribe(job: TranscriptionJob, audio_path: Path) -> list[dict]:
@@ -204,21 +195,15 @@ async def _transcribe(job: TranscriptionJob, audio_path: Path) -> list[dict]:
 
 async def _save_results(
     job: TranscriptionJob, segments: list[dict],
-    audio_filename: str, audio_path: Path, already_in_s3: bool,
+    audio_filename: str, audio_path: Path,
 ):
-    """Save segments to DB and upload audio to S3 if needed."""
+    """Save segments to DB."""
     _update_stage(job, JobStage.SAVING)
     await update_episode(
         job.episode_id, transcription_progress=job.progress
     )
 
     await save_segments(job.episode_id, segments)
-
-    # Upload to S3 if not already there
-    if not already_in_s3:
-        from app.services.s3 import upload_audio
-
-        await upload_audio(audio_path, audio_filename)
 
     await update_episode(
         job.episode_id, audio_filename=audio_filename
@@ -241,9 +226,9 @@ async def _process_job(job: TranscriptionJob):
     """Process a single transcription job through all stages."""
     tmp_path = None
     try:
-        tmp_path, audio_filename, already_in_s3 = await _download_audio(job)
+        tmp_path, audio_filename = await _download_audio(job)
         segments = await _transcribe(job, tmp_path)
-        await _save_results(job, segments, audio_filename, tmp_path, already_in_s3)
+        await _save_results(job, segments, audio_filename, tmp_path)
 
         # Extract entities (non-fatal)
         try:

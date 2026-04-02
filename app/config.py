@@ -19,10 +19,6 @@ PODCAST_URL = os.getenv("PODCAST_URL", "")
 # Admin password for /admin (leave empty to disable admin)
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
-# S3 audio storage (leave bucket empty to use only local files)
-S3_AUDIO_BUCKET = os.getenv("S3_AUDIO_BUCKET", "")
-S3_AUDIO_REGION = os.getenv("S3_AUDIO_REGION", "eu-north-1")
-
 # Hour (0-23, local time) to check RSS feed for new episodes
 FEED_CHECK_HOUR = int(os.getenv("FEED_CHECK_HOUR", "3"))
 

@@ -287,13 +287,9 @@ async def transcribe_file(mp3_path: Path, use_cloud: bool = False):
         # Spara segment
         await save_segments(episode_id, segments)
 
-        # Spara ljud (S3 eller lokalt)
+        # Bestäm audio_filename
         nr = episode_number or episode_id
         audio_filename = f"{published_date}-mediepodden-{nr}.mp3"
-
-        from app.services.s3 import upload_audio
-        await upload_audio(mp3_path, audio_filename)
-        logger.info("Laddade upp ljud till S3: %s", audio_filename)
 
         # Uppdatera episod
         await update_episode(
