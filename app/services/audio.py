@@ -7,9 +7,11 @@ Used to let users preview search result segments without exposing full episodes.
 import asyncio
 import hashlib
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app.config import AUDIO_DIR
+from app.services import storage
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +42,34 @@ def _clip_cache_path(episode_id: int, start: float, end: float) -> Path:
     return CLIP_DIR / f"{episode_id}_{h}.mp3"
 
 
-async def _resolve_audio_path(episode: dict) -> Path | None:
-    """Resolve audio path from local files only."""
-    return get_audio_path(episode)
+@asynccontextmanager
+async def _audio_file(episode: dict):
+    """Yield a readable Path to the episode audio.
+
+    Tries the local disk first (fast path). Falls back to downloading from
+    MinIO into a temp file, which is removed when the context exits.
+    Yields None if neither source produces a file.
+    """
+    local = get_audio_path(episode)
+    if local:
+        yield local
+        return
+
+    key = episode.get("audio_filename")
+    if key and storage.is_configured():
+        try:
+            tmp = await storage.download_audio(key)
+        except Exception:
+            logger.exception("Failed to download %s from MinIO", key)
+            yield None
+            return
+        try:
+            yield tmp
+        finally:
+            tmp.unlink(missing_ok=True)
+        return
+
+    yield None
 
 
 async def get_or_create_clip(
@@ -71,49 +98,49 @@ async def get_or_create_clip(
     if cache_path.exists():
         return cache_path
 
-    audio_path = await _resolve_audio_path(episode)
-    if not audio_path:
-        logger.warning("No audio available for episode %d", episode_id)
-        return None
-
-    try:
-        CLIP_DIR.mkdir(parents=True, exist_ok=True)
-
-        fade_out_start = max(0, duration - FADE_DURATION)
-        cmd = [
-            "ffmpeg", "-y",
-            "-ss", f"{clip_start:.2f}",
-            "-t", f"{duration:.2f}",
-            "-i", str(audio_path),
-            "-af", f"afade=in:d={FADE_DURATION},afade=out:st={fade_out_start:.2f}:d={FADE_DURATION}",
-            "-acodec", "libmp3lame",
-            "-ab", CLIP_BITRATE,
-            "-ar", str(CLIP_SAMPLE_RATE),
-            "-ac", "1",  # Mono to save bandwidth
-            str(cache_path),
-        ]
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=FFMPEG_CLIP_TIMEOUT)
-
-        if proc.returncode != 0:
-            logger.error("ffmpeg failed: %s", stderr.decode()[-500:])
-            cache_path.unlink(missing_ok=True)
+    async with _audio_file(episode) as audio_path:
+        if not audio_path:
+            logger.warning("No audio available for episode %d", episode_id)
             return None
 
-        return cache_path
+        try:
+            CLIP_DIR.mkdir(parents=True, exist_ok=True)
 
-    except asyncio.TimeoutError:
-        logger.error("ffmpeg timed out generating clip")
-        cache_path.unlink(missing_ok=True)
-        return None
-    except FileNotFoundError:
-        logger.error("ffmpeg not found. Install ffmpeg to enable audio clips.")
-        return None
+            fade_out_start = max(0, duration - FADE_DURATION)
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", f"{clip_start:.2f}",
+                "-t", f"{duration:.2f}",
+                "-i", str(audio_path),
+                "-af", f"afade=in:d={FADE_DURATION},afade=out:st={fade_out_start:.2f}:d={FADE_DURATION}",
+                "-acodec", "libmp3lame",
+                "-ab", CLIP_BITRATE,
+                "-ar", str(CLIP_SAMPLE_RATE),
+                "-ac", "1",  # Mono to save bandwidth
+                str(cache_path),
+            ]
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=FFMPEG_CLIP_TIMEOUT)
+
+            if proc.returncode != 0:
+                logger.error("ffmpeg failed: %s", stderr.decode()[-500:])
+                cache_path.unlink(missing_ok=True)
+                return None
+
+            return cache_path
+
+        except asyncio.TimeoutError:
+            logger.error("ffmpeg timed out generating clip")
+            cache_path.unlink(missing_ok=True)
+            return None
+        except FileNotFoundError:
+            logger.error("ffmpeg not found. Install ffmpeg to enable audio clips.")
+            return None
 
 
 async def generate_waveform_data(

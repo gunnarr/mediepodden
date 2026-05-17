@@ -25,6 +25,14 @@ FEED_CHECK_HOUR = int(os.getenv("FEED_CHECK_HOUR", "3"))
 # Anthropic API key (for blog generation script)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# MinIO / S3-compatible audio storage. Leave MINIO_ENDPOINT empty to disable
+# (the app then falls back to local-disk-only mode).
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "")
+MINIO_REGION = os.getenv("MINIO_REGION", "us-east-1")  # MinIO ignores this but boto3 wants a value
+
 
 class TranscriptionStatus:
     PENDING = "pending"
