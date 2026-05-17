@@ -108,12 +108,27 @@ async def find_episode_by_feed(feed_ep: dict) -> dict | None:
     return None
 
 
-async def get_next_episode_number() -> int:
-    """Return the next available episode number (max + 1)."""
+async def get_next_episode_number(published_date: str | None = None) -> int:
+    """Return the next available episode number for a new episode.
+
+    When `published_date` is given, returns `max(episode_number) + 1` among
+    episodes published strictly before that date. This isolates a new episode's
+    number from any stray-high numbers that may exist for later/erroneous rows,
+    so a single bad auto-assignment doesn't poison all future ones.
+
+    Without a date, falls back to global `max + 1`.
+    """
     async with get_db() as db:
-        cursor = await db.execute(
-            "SELECT MAX(episode_number) FROM episodes WHERE episode_number IS NOT NULL"
-        )
+        if published_date:
+            cursor = await db.execute(
+                "SELECT MAX(episode_number) FROM episodes "
+                "WHERE episode_number IS NOT NULL AND published_date < ?",
+                (published_date,),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT MAX(episode_number) FROM episodes WHERE episode_number IS NOT NULL"
+            )
         row = await cursor.fetchone()
         return (row[0] or 0) + 1
 

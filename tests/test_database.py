@@ -8,6 +8,7 @@ from app.database import (
     get_episode,
     get_episode_by_slug,
     get_episode_segments,
+    get_next_episode_number,
     get_stats,
     save_segments,
     search_segments,
@@ -17,6 +18,39 @@ from app.database import (
     log_page_view,
     get_analytics,
 )
+
+
+class TestGetNextEpisodeNumber:
+    @pytest.mark.asyncio
+    async def test_empty_db_returns_one(self):
+        assert await get_next_episode_number() == 1
+
+    @pytest.mark.asyncio
+    async def test_global_max_plus_one_without_date(self):
+        await create_episode("Ep 100", 100, None, None, "2025-01-01")
+        await create_episode("Ep 105", 105, None, None, "2025-02-01")
+        assert await get_next_episode_number() == 106
+
+    @pytest.mark.asyncio
+    async def test_ignores_stray_high_numbers_for_earlier_date(self):
+        """A bad auto-assignment in the future must not poison earlier numbering.
+
+        Regression: when an episode incorrectly received ep_nr=441 (published
+        2026-05-07), the next episode for 2026-04-22 was assigned 442 instead
+        of 342. With a date scope, the stray-high row is excluded.
+        """
+        await create_episode("Real 340", 340, None, None, "2026-04-22")
+        await create_episode("Real 341", 341, None, None, "2026-04-30")
+        await create_episode("Stray 441", 441, None, None, "2026-05-07")
+
+        # New episode published 2026-05-01 should slot in at 342, not 442.
+        assert await get_next_episode_number("2026-05-01") == 342
+
+    @pytest.mark.asyncio
+    async def test_strict_less_than_excludes_same_date(self):
+        await create_episode("Same day", 50, None, None, "2025-06-01")
+        # Same date → not counted as "before" → starts from 1.
+        assert await get_next_episode_number("2025-06-01") == 1
 
 
 class TestEpisodeCRUD:

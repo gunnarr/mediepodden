@@ -40,7 +40,7 @@ IN_DIR = PROJECT_ROOT / "IN"
 OUT_DIR = PROJECT_ROOT / "OUT"
 
 # Whisper-inställningar (mlx-whisper med lokal MLX-konverterad KB-modell)
-MLX_MODEL_PATH = str(PROJECT_ROOT / "cache" / "kb-whisper-large-mlx")
+MLX_MODEL_PATH = os.getenv("MLX_WHISPER_MODEL") or str(PROJECT_ROOT / "cache" / "kb-whisper-large-mlx-fp16")
 HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 
 _diarize_pipeline = None

@@ -229,8 +229,8 @@ class TestCheckFeed:
         """Episodes without episode_number should get auto-assigned next number."""
         mock_worker.return_value = None
 
-        # Pre-create episode 200 so next number is 201
-        await create_episode("Mediepodden 200", 200, None, None, None)
+        # Pre-create episode 200 (published earlier) so next number is 201
+        await create_episode("Mediepodden 200", 200, None, None, "2025-06-01")
 
         mock_parse.return_value = [{
             "title": "EXTRA - Bonusavsnitt",

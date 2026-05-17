@@ -57,7 +57,7 @@ async def check_feed() -> int:
         # New episode — create and start transcription
         episode_number = ep["episode_number"]
         if episode_number is None:
-            episode_number = await get_next_episode_number()
+            episode_number = await get_next_episode_number(ep["published"] or None)
             logger.info("Auto-assigned episode number %d to: %s", episode_number, ep["title"])
         logger.info("New episode found: %s (ep %s)", ep["title"], episode_number)
         audio_fname = make_audio_filename(
