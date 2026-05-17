@@ -35,6 +35,8 @@ scripts/backup.sh
 scripts/s3_backup.py
 scripts/mediepodden-backup.service
 scripts/mediepodden-backup.timer
+scripts/weekly.py
+scripts/weekly-wrapper.sh
 
 # Project instructions (private)
 CLAUDE.md
