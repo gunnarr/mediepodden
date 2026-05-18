@@ -24,6 +24,10 @@ CLIP_SAMPLE_RATE = 44100
 WAVEFORM_SAMPLE_RATE = 8000
 FFMPEG_CLIP_TIMEOUT = 30  # seconds
 FFMPEG_WAVEFORM_TIMEOUT = 15  # seconds
+# Extra audio on each side of the clip's time range when fetching a Range from
+# MinIO. Compensates for VBR encoders that don't strictly hit CBR bitrate. 5s
+# is conservative — for ~130-min episodes this is <0.1% of the file.
+RANGE_SAFETY_SECONDS = 5
 
 
 def get_audio_path(episode: dict) -> Path | None:
@@ -44,11 +48,15 @@ def _clip_cache_path(episode_id: int, start: float, end: float) -> Path:
 
 @asynccontextmanager
 async def _audio_file(episode: dict):
-    """Yield a readable Path to the episode audio.
+    """Yield a readable Path to the episode audio (full file).
 
-    Tries the local disk first (fast path). Falls back to downloading from
-    MinIO into a temp file, which is removed when the context exits.
-    Yields None if neither source produces a file.
+    Tries the local disk first (fast path). Falls back to downloading the
+    entire object from MinIO into a temp file, which is removed when the
+    context exits. Yields None if neither source produces a file.
+
+    Prefer `_prepare_audio_for_clip()` when you only need a short window —
+    it downloads just the relevant byte range from MinIO and is ~10x faster
+    on cold cache.
     """
     local = get_audio_path(episode)
     if local:
@@ -72,6 +80,73 @@ async def _audio_file(episode: dict):
     yield None
 
 
+@asynccontextmanager
+async def _prepare_audio_for_clip(
+    episode: dict,
+    clip_start_s: float,
+    clip_end_s: float,
+):
+    """Yield (path, offset_seconds) where ffmpeg can read audio for the clip.
+
+    Three resolution paths, in order:
+      1. Local disk hit              → (local_path, 0.0)            full file
+      2. MinIO Range (fast)          → (tmp_path,  range_start_s)   partial file
+      3. MinIO full download (slow)  → (tmp_path,  0.0)             full file
+
+    `offset_seconds` is how far into the original audio the returned file
+    starts. ffmpeg should seek with `-ss (clip_start_s - offset_seconds)`.
+
+    Path 2 is taken only when `audio_filename` and `duration_seconds` are
+    both present on the episode (needed to convert time → byte range via
+    CBR approximation). On any Range failure, falls through to path 3.
+
+    Temp files are deleted when the context exits.
+    """
+    local = get_audio_path(episode)
+    if local:
+        yield local, 0.0
+        return
+
+    key = episode.get("audio_filename")
+    if not key or not storage.is_configured():
+        yield None, 0.0
+        return
+
+    duration = episode.get("duration_seconds")
+    if duration and duration > 0:
+        try:
+            size = await storage.audio_size(key)
+            if size:
+                bitrate_bps = size * 8 / duration
+                range_start_s = max(0.0, clip_start_s - RANGE_SAFETY_SECONDS)
+                range_end_s = min(float(duration), clip_end_s + RANGE_SAFETY_SECONDS)
+                byte_start = int(range_start_s * bitrate_bps / 8)
+                byte_end = int(range_end_s * bitrate_bps / 8) - 1
+                if byte_end > byte_start:
+                    tmp = await storage.download_audio_range(key, byte_start, byte_end)
+                    try:
+                        yield tmp, range_start_s
+                        return
+                    finally:
+                        tmp.unlink(missing_ok=True)
+        except Exception:
+            logger.exception(
+                "Range download for %s failed, falling back to full", key
+            )
+
+    # Fallback: full download
+    try:
+        tmp = await storage.download_audio(key)
+    except Exception:
+        logger.exception("Failed to download %s from MinIO (full)", key)
+        yield None, 0.0
+        return
+    try:
+        yield tmp, 0.0
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 async def get_or_create_clip(
     episode: dict,
     episode_id: int,
@@ -92,16 +167,21 @@ async def get_or_create_clip(
     # Clamp duration
     duration = min(end - start + 2 * CLIP_PADDING, MAX_CLIP_DURATION)
     clip_start = max(0, start - CLIP_PADDING)
+    clip_end = clip_start + duration
 
     cache_path = _clip_cache_path(episode_id, start, end)
 
     if cache_path.exists():
         return cache_path
 
-    async with _audio_file(episode) as audio_path:
+    async with _prepare_audio_for_clip(episode, clip_start, clip_end) as (audio_path, offset_s):
         if not audio_path:
             logger.warning("No audio available for episode %d", episode_id)
             return None
+
+        # Seek into the (possibly partial) file: the file starts at offset_s
+        # into the original audio, so we subtract that.
+        ffmpeg_seek = max(0.0, clip_start - offset_s)
 
         try:
             CLIP_DIR.mkdir(parents=True, exist_ok=True)
@@ -109,7 +189,7 @@ async def get_or_create_clip(
             fade_out_start = max(0, duration - FADE_DURATION)
             cmd = [
                 "ffmpeg", "-y",
-                "-ss", f"{clip_start:.2f}",
+                "-ss", f"{ffmpeg_seek:.2f}",
                 "-t", f"{duration:.2f}",
                 "-i", str(audio_path),
                 "-af", f"afade=in:d={FADE_DURATION},afade=out:st={fade_out_start:.2f}:d={FADE_DURATION}",

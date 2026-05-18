@@ -81,6 +81,34 @@ async def download_audio(key: str) -> Path:
     return tmp_path
 
 
+async def download_audio_range(key: str, byte_start: int, byte_end: int) -> Path:
+    """Download a byte range of an audio object to a temp file.
+
+    `byte_end` is inclusive (S3 Range semantics). Caller must unlink when done.
+    """
+    if not is_configured():
+        raise RuntimeError("MinIO storage is not configured")
+    client = _get_client()
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
+    range_header = f"bytes={byte_start}-{byte_end}"
+    logger.info("Downloading %s/%s [%s]", MINIO_BUCKET, key, range_header)
+
+    def _fetch():
+        resp = client.get_object(Bucket=MINIO_BUCKET, Key=key, Range=range_header)
+        with open(tmp_path, "wb") as f:
+            for chunk in iter(lambda: resp["Body"].read(65536), b""):
+                f.write(chunk)
+
+    try:
+        await asyncio.to_thread(_fetch)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return tmp_path
+
+
 async def audio_exists(key: str) -> bool:
     """Return True if an object exists in the bucket."""
     if not is_configured():
