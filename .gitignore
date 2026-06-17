@@ -37,6 +37,8 @@ scripts/mediepodden-backup.service
 scripts/mediepodden-backup.timer
 scripts/weekly.py
 scripts/weekly-wrapper.sh
+requirements-local.txt
+tests/test_weekly_preflight.py
 
 # Project instructions (private)
 CLAUDE.md
